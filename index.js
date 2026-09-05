@@ -43,7 +43,21 @@ async function run() {
       catch(err){
         res.status(500).send({message:"Error fetching products....",err});
       }
+    });
+
+    // show all data in all products page.....
+
+    app.get('/all-products',async(req,res)=>{
+      try{
+        const result=await productsCollecton.find().toArray();
+        res.send(result);
+      }
+      catch(err){
+        res.status(500).send({message:"Error fetching products....",err});
+      }
     })
+
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
