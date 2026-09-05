@@ -29,6 +29,21 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
+    const db=client.db('kmsdeals-db');
+    const productsCollecton=db.collection('products');
+
+    // show 6 data in home page........
+
+    app.get('/latest-products',async(req,res)=>{
+      try{
+        const result=await productsCollecton.find().sort({
+        created_at:-1}).limit(6).toArray();
+        res.send(result);
+      }
+      catch(err){
+        res.status(500).send({message:"Error fetching products....",err});
+      }
+    })
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
