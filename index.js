@@ -1,5 +1,5 @@
 require('dotenv').config({path:'.env.local'});
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 
@@ -55,8 +55,34 @@ async function run() {
       catch(err){
         res.status(500).send({message:"Error fetching products....",err});
       }
-    })
+    });
 
+
+    // show product details based on id......
+app.get('/productDetails/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    // Check if the ID string is valid 24-character hex string before constructing ObjectId
+    let query;
+    if (ObjectId.isValid(id)) {
+      query = { $or: [{ _id: new ObjectId(id) }, { _id: id }] };
+    } else {
+      query = { _id: id };
+    }
+
+    const result = await productsCollecton.findOne(query);
+
+    if (!result) {
+      return res.status(404).send({ message: "Product not found" });
+    }
+
+    res.send(result);
+  } catch (err) {
+    console.error("Fetch product error:", err);
+    res.status(500).send({ message: "Error fetching product details", err: err.message });
+  }
+});
 
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
