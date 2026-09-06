@@ -31,6 +31,7 @@ async function run() {
     await client.connect();
     const db=client.db('kmsdeals-db');
     const productsCollecton=db.collection('products');
+    const bidsCollecton=db.collection('bids');
 
     // show 6 data in home page........
 
@@ -81,6 +82,68 @@ app.get('/productDetails/:id', async (req, res) => {
   } catch (err) {
     console.error("Fetch product error:", err);
     res.status(500).send({ message: "Error fetching product details", err: err.message });
+  }
+});
+
+// get all bids information........
+
+app.get('/bids/product/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    // Search bids matching the product ID
+    const query = { product: productId };
+    const bids = await bidsCollecton.find(query).toArray();
+
+    res.status(200).send(bids);
+  } catch (error) {
+    console.error("Error fetching bids:", error);
+    res.status(500).send({ message: "Failed to fetch bids" });
+  }
+});
+// create new bid.......
+
+
+app.post('/bids', async (req, res) => {
+  try {
+    const { product, buyer_image, buyer_name, buyer_contact, buyer_email, bid_price } = req.body;
+
+    const newBid = {
+      product: product, // Product ID reference
+      buyer_image,
+      buyer_name,
+      buyer_contact,
+      buyer_email,
+      bid_price: Number(bid_price),
+      status: 'pending', // Initial status
+      created_at: new Date()
+    };
+
+    const result = await bidsCollecton.insertOne(newBid);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Error creating bid:", error);
+    res.status(500).send({ message: "Failed to submit bid" });
+  }
+});
+
+// upadte the bid actions.....
+
+app.patch('/bids/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // 'confirmed' or 'rejected'
+
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+      $set: { status: status }
+    };
+
+    const result = await bidsCollecton.updateOne(filter, updateDoc);
+    res.status(200).send(result);
+  } catch (error) {
+    console.error("Error updating bid status:", error);
+    res.status(500).send({ message: "Failed to update status" });
   }
 });
 
