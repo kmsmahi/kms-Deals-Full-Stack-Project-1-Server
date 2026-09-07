@@ -1,4 +1,4 @@
-require('dotenv').config({path:'.env.local'});
+require('dotenv').config({ path: '.env.local' });
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
@@ -6,13 +6,13 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
+// Middleware - Enable CORS for Vite frontend
+app.use(cors({
+  origin: '*', // Allows all localhost origins during development
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+}));
 app.use(express.json());
 
-// Quick check to see if variables are loading correctly
-console.log("DB User:", process.env.DB_USER);
-
-// Safe URL encoding for special characters in password
 const dbUser = process.env.DB_USER;
 const dbPass = encodeURIComponent(process.env.DB_PASS || '');
 
@@ -28,137 +28,103 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    // Keep connection alive
     await client.connect();
-    const db=client.db('kmsdeals-db');
-    const productsCollecton=db.collection('products');
-    const bidsCollecton=db.collection('bids');
+    console.log("Connected successfully to MongoDB!");
 
-    // show 6 data in home page........
+    const db = client.db('kmsdeals-db');
+    const productsCollection = db.collection('products');
+    const bidsCollection = db.collection('bids');
 
-    app.get('/latest-products',async(req,res)=>{
-      try{
-        const result=await productsCollecton.find().sort({
-        created_at:-1}).limit(6).toArray();
-        res.send(result);
-      }
-      catch(err){
-        res.status(500).send({message:"Error fetching products....",err});
-      }
-    });
-
-    // show all data in all products page.....
-
-    app.get('/all-products',async(req,res)=>{
-      try{
-        const result=await productsCollecton.find().toArray();
-        res.send(result);
-      }
-      catch(err){
-        res.status(500).send({message:"Error fetching products....",err});
+    // 1. Get Home Page Latest Products
+    app.get('/latest-products', async (req, res) => {
+      try {
+        const result = await productsCollection
+          .find()
+          .sort({ created_at: -1 })
+          .limit(6)
+          .toArray();
+        res.status(200).json(result);
+      } catch (err) {
+        console.error("Error fetching latest products:", err);
+        res.status(500).json({ message: "Error fetching latest products", error: err.message });
       }
     });
 
+    // 2. Get All Products
+    app.get('/all-products', async (req, res) => {
+      try {
+        const result = await productsCollection.find().toArray();
+        res.status(200).json(result);
+      } catch (err) {
+        console.error("Error fetching all products:", err);
+        res.status(500).json({ message: "Error fetching products", error: err.message });
+      }
+    });
 
-    // show product details based on id......
-app.get('/productDetails/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
+    // 3. Get Single Product Details by ID
+    app.get('/productDetails/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        let query;
 
-    // Check if the ID string is valid 24-character hex string before constructing ObjectId
-    let query;
-    if (ObjectId.isValid(id)) {
-      query = { $or: [{ _id: new ObjectId(id) }, { _id: id }] };
-    } else {
-      query = { _id: id };
-    }
+        if (ObjectId.isValid(id)) {
+          query = { $or: [{ _id: new ObjectId(id) }, { _id: id }] };
+        } else {
+          query = { _id: id };
+        }
 
-    const result = await productsCollecton.findOne(query);
+        const result = await productsCollection.findOne(query);
 
-    if (!result) {
-      return res.status(404).send({ message: "Product not found" });
-    }
+        if (!result) {
+          return res.status(404).json({ message: "Product not found" });
+        }
 
-    res.send(result);
-  } catch (err) {
-    console.error("Fetch product error:", err);
-    res.status(500).send({ message: "Error fetching product details", err: err.message });
-  }
-});
+        res.status(200).json(result);
+      } catch (err) {
+        console.error("Error fetching product details:", err);
+        res.status(500).json({ message: "Error fetching product details", error: err.message });
+      }
+    });
 
-// get all bids information........
+    // 4. Get User Products
+    app.get('/my-products/:email', async (req, res) => {
+      try {
+        const { email } = req.params;
+        const query = { 
+          $or: [{ email: email }, { seller_email: email }] 
+        };
+        const result = await productsCollection.find(query).toArray();
+        res.status(200).json(result);
+      } catch (err) {
+        res.status(500).json({ message: "Error fetching user products", error: err.message });
+      }
+    });
 
-app.get('/bids/product/:productId', async (req, res) => {
-  try {
-    const { productId } = req.params;
+    // 5. Get User Bids
+    app.get('/my-bids/:email', async (req, res) => {
+      try {
+        const { email } = req.params;
+        const query = { buyer_email: email };
+        const result = await bidsCollection.find(query).toArray();
+        res.status(200).json(result);
+      } catch (error) {
+        res.status(500).json({ message: "Error fetching user bids", error: error.message });
+      }
+    });
 
-    // Search bids matching the product ID
-    const query = { product: productId };
-    const bids = await bidsCollecton.find(query).toArray();
+    // Health check endpoint
+    app.get('/', (req, res) => {
+      res.send('KmsDeals Server is Running...');
+    });
 
-    res.status(200).send(bids);
-  } catch (error) {
-    console.error("Error fetching bids:", error);
-    res.status(500).send({ message: "Failed to fetch bids" });
-  }
-});
-// create new bid.......
-
-
-app.post('/bids', async (req, res) => {
-  try {
-    const { product, buyer_image, buyer_name, buyer_contact, buyer_email, bid_price } = req.body;
-
-    const newBid = {
-      product: product, // Product ID reference
-      buyer_image,
-      buyer_name,
-      buyer_contact,
-      buyer_email,
-      bid_price: Number(bid_price),
-      status: 'pending', // Initial status
-      created_at: new Date()
-    };
-
-    const result = await bidsCollecton.insertOne(newBid);
-    res.status(201).send(result);
-  } catch (error) {
-    console.error("Error creating bid:", error);
-    res.status(500).send({ message: "Failed to submit bid" });
-  }
-});
-
-// upadte the bid actions.....
-
-app.patch('/bids/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body; // 'confirmed' or 'rejected'
-
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = {
-      $set: { status: status }
-    };
-
-    const result = await bidsCollecton.updateOne(filter, updateDoc);
-    res.status(200).send(result);
-  } catch (error) {
-    console.error("Error updating bid status:", error);
-    res.status(500).send({ message: "Failed to update status" });
-  }
-});
-
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
     console.error("MongoDB Connection Error:", error);
   }
 }
+
 run().catch(console.dir);
 
-app.get('/', (req, res) => {
-  res.send('salauddin mahi');
-});
-
 app.listen(port, () => {
-  console.log(`Server running on port: ${port}`);
+  console.log(`Server is running on port: ${port}`);
 });
