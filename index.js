@@ -229,6 +229,39 @@ app.post('/products', async (req, res) => {
   }
 });
 
+
+// Fetch products created by a specific user
+app.get('/my-products', async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) {
+      return res.status(400).send({ message: "Email query parameter is required" });
+    }
+
+    const query = { seller_email: email };
+    const result = await productsCollecton.find(query).sort({ created_at: -1 }).toArray();
+
+    res.send(result);
+  } catch (error) {
+    console.error("Error fetching user products:", error);
+    res.status(500).send({ message: "Failed to fetch user products", error: error.message });
+  }
+});
+
+// Delete a product listing
+app.delete('/products/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const result = await productsCollecton.deleteOne(query);
+
+    res.send(result);
+  } catch (error) {
+    console.error("Error deleting product:", error);
+    res.status(500).send({ message: "Failed to delete product", error: error.message });
+  }
+});
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
