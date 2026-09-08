@@ -29,238 +29,248 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    const db=client.db('kmsdeals-db');
-    const productsCollecton=db.collection('products');
-    const bidsCollecton=db.collection('bids');
+    const db = client.db('kmsdeals-db');
+    const productsCollecton = db.collection('products');
+    const bidsCollecton = db.collection('bids');
 
-    // show 6 data in home page........
+    // =========================================================================
+    // OPTIMIZATION 1: CREATE INDEXES FOR FAST QUERY EXECUTION
+    // =========================================================================
+    await productsCollecton.createIndex({ created_at: -1 });
+    await productsCollecton.createIndex({ seller_email: 1 });
+    await productsCollecton.createIndex({ category: 1 });
+    await bidsCollecton.createIndex({ buyer_email: 1 });
+    await bidsCollecton.createIndex({ product: 1 });
+    console.log("Database indexes verified/created successfully.");
 
-    app.get('/latest-products',async(req,res)=>{
-      try{
-        const result=await productsCollecton.find().sort({
-        created_at:-1}).limit(6).toArray();
+    // Projection object for product cards (excludes heavy fields like full description)
+    const cardProjection = {
+      title: 1,
+      category: 1,
+      condition: 1,
+      price_min: 1,
+      price_max: 1,
+      usage_time: 1,
+      image: 1,
+      created_at: 1,
+      seller_email: 1
+    };
+
+    // show 6 data in home page........ (OPTIMIZED WITH INDEX & PROJECTION)
+    app.get('/latest-products', async (req, res) => {
+      try {
+        const result = await productsCollecton
+          .find({}, { projection: cardProjection })
+          .sort({ created_at: -1 })
+          .limit(6)
+          .toArray();
         res.send(result);
-      }
-      catch(err){
-        res.status(500).send({message:"Error fetching products....",err});
+      } catch (err) {
+        res.status(500).send({ message: "Error fetching products....", err });
       }
     });
 
-    // show all data in all products page.....
-
-    app.get('/all-products',async(req,res)=>{
-      try{
-        const result=await productsCollecton.find().toArray();
+    // show all data in all products page..... (OPTIMIZED WITH INDEX & PROJECTION)
+    app.get('/all-products', async (req, res) => {
+      try {
+        const result = await productsCollecton
+          .find({}, { projection: cardProjection })
+          .sort({ created_at: -1 })
+          .toArray();
         res.send(result);
-      }
-      catch(err){
-        res.status(500).send({message:"Error fetching products....",err});
+      } catch (err) {
+        res.status(500).send({ message: "Error fetching products....", err });
       }
     });
-
 
     // show product details based on id......
-app.get('/productDetails/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
+    app.get('/productDetails/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
 
-    // Check if the ID string is valid 24-character hex string before constructing ObjectId
-    let query;
-    if (ObjectId.isValid(id)) {
-      query = { $or: [{ _id: new ObjectId(id) }, { _id: id }] };
-    } else {
-      query = { _id: id };
-    }
+        // Check if the ID string is valid 24-character hex string before constructing ObjectId
+        let query;
+        if (ObjectId.isValid(id)) {
+          query = { $or: [{ _id: new ObjectId(id) }, { _id: id }] };
+        } else {
+          query = { _id: id };
+        }
 
-    const result = await productsCollecton.findOne(query);
+        const result = await productsCollecton.findOne(query);
 
-    if (!result) {
-      return res.status(404).send({ message: "Product not found" });
-    }
+        if (!result) {
+          return res.status(404).send({ message: "Product not found" });
+        }
 
-    res.send(result);
-  } catch (err) {
-    console.error("Fetch product error:", err);
-    res.status(500).send({ message: "Error fetching product details", err: err.message });
-  }
-});
+        res.send(result);
+      } catch (err) {
+        console.error("Fetch product error:", err);
+        res.status(500).send({ message: "Error fetching product details", err: err.message });
+      }
+    });
 
-// get all bids information........
+    // get all bids information........
+    app.get('/bids/product/:productId', async (req, res) => {
+      try {
+        const { productId } = req.params;
 
-app.get('/bids/product/:productId', async (req, res) => {
-  try {
-    const { productId } = req.params;
+        // Search bids matching the product ID
+        const query = { product: productId };
+        const bids = await bidsCollecton.find(query).toArray();
 
-    // Search bids matching the product ID
-    const query = { product: productId };
-    const bids = await bidsCollecton.find(query).toArray();
+        res.status(200).send(bids);
+      } catch (error) {
+        console.error("Error fetching bids:", error);
+        res.status(500).send({ message: "Failed to fetch bids" });
+      }
+    });
 
-    res.status(200).send(bids);
-  } catch (error) {
-    console.error("Error fetching bids:", error);
-    res.status(500).send({ message: "Failed to fetch bids" });
-  }
-});
-// create new bid.......
+    // create new bid.......
+    app.post('/bids', async (req, res) => {
+      try {
+        const { product, buyer_image, buyer_name, buyer_contact, buyer_email, bid_price } = req.body;
 
+        const newBid = {
+          product: product, // Product ID reference
+          buyer_image,
+          buyer_name,
+          buyer_contact,
+          buyer_email,
+          bid_price: Number(bid_price),
+          status: 'pending', // Initial status
+          created_at: new Date()
+        };
 
-app.post('/bids', async (req, res) => {
-  try {
-    const { product, buyer_image, buyer_name, buyer_contact, buyer_email, bid_price } = req.body;
+        const result = await bidsCollecton.insertOne(newBid);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error creating bid:", error);
+        res.status(500).send({ message: "Failed to submit bid" });
+      }
+    });
 
-    const newBid = {
-      product: product, // Product ID reference
-      buyer_image,
-      buyer_name,
-      buyer_contact,
-      buyer_email,
-      bid_price: Number(bid_price),
-      status: 'pending', // Initial status
-      created_at: new Date()
-    };
+    // upadte the bid actions.....
+    app.patch('/bids/:id', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body; // 'confirmed' or 'rejected'
 
-    const result = await bidsCollecton.insertOne(newBid);
-    res.status(201).send(result);
-  } catch (error) {
-    console.error("Error creating bid:", error);
-    res.status(500).send({ message: "Failed to submit bid" });
-  }
-});
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: { status: status }
+        };
 
-// upadte the bid actions.....
+        const result = await bidsCollecton.updateOne(filter, updateDoc);
+        res.status(200).send(result);
+      } catch (error) {
+        console.error("Error updating bid status:", error);
+        res.status(500).send({ message: "Failed to update status" });
+      }
+    });
 
-app.patch('/bids/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body; // 'confirmed' or 'rejected'
+    // Get data for my bids page with populated product info
+    app.get('/my-bids', async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res.status(400).send({ message: "Email parameter is required" });
+        }
 
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = {
-      $set: { status: status }
-    };
-
-    const result = await bidsCollecton.updateOne(filter, updateDoc);
-    res.status(200).send(result);
-  } catch (error) {
-    console.error("Error updating bid status:", error);
-    res.status(500).send({ message: "Failed to update status" });
-  }
-});
-  // get data for my bids page
-//     app.get('/my-bids', async (req, res) => {
-//   const email = req.query.email;
-//   if (!email) {
-//     return res.status(400).send({ message: "Email parameter is required" });
-//   }
-//   const query = { buyer_email: email }; 
-//   const result = await bidsCollecton.find(query).toArray();
-//   res.send(result);
-// });
-
-
-// Get data for my bids page with populated product info
-app.get('/my-bids', async (req, res) => {
-  try {
-    const email = req.query.email;
-    if (!email) {
-      return res.status(400).send({ message: "Email parameter is required" });
-    }
-
-    const bids = await bidsCollecton.aggregate([
-      {
-        $match: { buyer_email: email }
-      },
-      // Convert string product ID to ObjectId if stored as ObjectId, or match string directly
-      {
-        $addFields: {
-          productObjId: {
-            $cond: {
-              if: { $regexMatch: { input: "$product", regex: /^[0-9a-fA-F]{24}$/ } },
-              then: { $toObjectId: "$product" },
-              else: "$product"
+        const bids = await bidsCollecton.aggregate([
+          {
+            $match: { buyer_email: email }
+          },
+          // Convert string product ID to ObjectId if stored as ObjectId, or match string directly
+          {
+            $addFields: {
+              productObjId: {
+                $cond: {
+                  if: { $regexMatch: { input: "$product", regex: /^[0-9a-fA-F]{24}$/ } },
+                  then: { $toObjectId: "$product" },
+                  else: "$product"
+                }
+              }
+            }
+          },
+          // Join with products collection
+          {
+            $lookup: {
+              from: 'products',
+              localField: 'productObjId',
+              foreignField: '_id',
+              as: 'productDetails'
+            }
+          },
+          // Unwind the array returned by lookup
+          {
+            $unwind: {
+              path: '$productDetails',
+              preserveNullAndEmptyArrays: true
             }
           }
-        }
-      },
-      // Join with products collection
-      {
-        $lookup: {
-          from: 'products',
-          localField: 'productObjId',
-          foreignField: '_id',
-          as: 'productDetails'
-        }
-      },
-      // Unwind the array returned by lookup
-      {
-        $unwind: {
-          path: '$productDetails',
-          preserveNullAndEmptyArrays: true
-        }
+        ]).toArray();
+
+        res.send(bids);
+      } catch (error) {
+        console.error("Error in /my-bids aggregation:", error);
+        res.status(500).send({ message: "Failed to fetch bids", error: error.message });
       }
-    ]).toArray();
+    });
 
-    res.send(bids);
-  } catch (error) {
-    console.error("Error in /my-bids aggregation:", error);
-    res.status(500).send({ message: "Failed to fetch bids", error: error.message });
-  }
-});
+    // perform delete in mybids page.....
+    app.delete('/bids/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bidsCollecton.deleteOne(query);
+      res.send(result);
+    });
 
+    // Create a new product listing
+    app.post('/products', async (req, res) => {
+      try {
+        const productData = req.body;
+        const result = await productsCollecton.insertOne({
+          ...productData,
+          created_at: productData.created_at ? new Date(productData.created_at) : new Date()
+        });
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error creating product:", error);
+        res.status(500).send({ message: "Failed to create product listing", error: error.message });
+      }
+    });
 
-// perform delete in mybids page.....
-app.delete('/bids/:id', async (req, res) => {
-  const id = req.params.id;
-  const query = { _id: new ObjectId(id) };
-  const result = await bidsCollecton.deleteOne(query);
-  res.send(result);
-});
+    // Fetch products created by a specific user
+    app.get('/my-products', async (req, res) => {
+      try {
+        const email = req.query.email;
+        if (!email) {
+          return res.status(400).send({ message: "Email query parameter is required" });
+        }
 
+        const query = { seller_email: email };
+        const result = await productsCollecton.find(query).sort({ created_at: -1 }).toArray();
 
-// Create a new product listing
-app.post('/products', async (req, res) => {
-  try {
-    const productData = req.body;
-    const result = await productsCollecton.insertOne(productData);
-    res.status(201).send(result);
-  } catch (error) {
-    console.error("Error creating product:", error);
-    res.status(500).send({ message: "Failed to create product listing", error: error.message });
-  }
-});
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching user products:", error);
+        res.status(500).send({ message: "Failed to fetch user products", error: error.message });
+      }
+    });
 
+    // Delete a product listing
+    app.delete('/products/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await productsCollecton.deleteOne(query);
 
-// Fetch products created by a specific user
-app.get('/my-products', async (req, res) => {
-  try {
-    const email = req.query.email;
-    if (!email) {
-      return res.status(400).send({ message: "Email query parameter is required" });
-    }
-
-    const query = { seller_email: email };
-    const result = await productsCollecton.find(query).sort({ created_at: -1 }).toArray();
-
-    res.send(result);
-  } catch (error) {
-    console.error("Error fetching user products:", error);
-    res.status(500).send({ message: "Failed to fetch user products", error: error.message });
-  }
-});
-
-// Delete a product listing
-app.delete('/products/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await productsCollecton.deleteOne(query);
-
-    res.send(result);
-  } catch (error) {
-    console.error("Error deleting product:", error);
-    res.status(500).send({ message: "Failed to delete product", error: error.message });
-  }
-});
+        res.send(result);
+      } catch (error) {
+        console.error("Error deleting product:", error);
+        res.status(500).send({ message: "Failed to delete product", error: error.message });
+      }
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
