@@ -216,6 +216,19 @@ app.delete('/bids/:id', async (req, res) => {
   res.send(result);
 });
 
+
+// Create a new product listing
+app.post('/products', async (req, res) => {
+  try {
+    const productData = req.body;
+    const result = await productsCollecton.insertOne(productData);
+    res.status(201).send(result);
+  } catch (error) {
+    console.error("Error creating product:", error);
+    res.status(500).send({ message: "Failed to create product listing", error: error.message });
+  }
+});
+
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } catch (error) {
