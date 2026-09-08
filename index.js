@@ -147,15 +147,67 @@ app.patch('/bids/:id', async (req, res) => {
   }
 });
   // get data for my bids page
-    app.get('/my-bids', async (req, res) => {
-  const email = req.query.email;
-  if (!email) {
-    return res.status(400).send({ message: "Email parameter is required" });
+//     app.get('/my-bids', async (req, res) => {
+//   const email = req.query.email;
+//   if (!email) {
+//     return res.status(400).send({ message: "Email parameter is required" });
+//   }
+//   const query = { buyer_email: email }; 
+//   const result = await bidsCollecton.find(query).toArray();
+//   res.send(result);
+// });
+
+
+// Get data for my bids page with populated product info
+app.get('/my-bids', async (req, res) => {
+  try {
+    const email = req.query.email;
+    if (!email) {
+      return res.status(400).send({ message: "Email parameter is required" });
+    }
+
+    const bids = await bidsCollecton.aggregate([
+      {
+        $match: { buyer_email: email }
+      },
+      // Convert string product ID to ObjectId if stored as ObjectId, or match string directly
+      {
+        $addFields: {
+          productObjId: {
+            $cond: {
+              if: { $regexMatch: { input: "$product", regex: /^[0-9a-fA-F]{24}$/ } },
+              then: { $toObjectId: "$product" },
+              else: "$product"
+            }
+          }
+        }
+      },
+      // Join with products collection
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productObjId',
+          foreignField: '_id',
+          as: 'productDetails'
+        }
+      },
+      // Unwind the array returned by lookup
+      {
+        $unwind: {
+          path: '$productDetails',
+          preserveNullAndEmptyArrays: true
+        }
+      }
+    ]).toArray();
+
+    res.send(bids);
+  } catch (error) {
+    console.error("Error in /my-bids aggregation:", error);
+    res.status(500).send({ message: "Failed to fetch bids", error: error.message });
   }
-  const query = { buyer_email: email }; 
-  const result = await bidsCollecton.find(query).toArray();
-  res.send(result);
 });
+
+
 // perform delete in mybids page.....
 app.delete('/bids/:id', async (req, res) => {
   const id = req.params.id;
