@@ -146,6 +146,23 @@ app.patch('/bids/:id', async (req, res) => {
     res.status(500).send({ message: "Failed to update status" });
   }
 });
+  // get data for my bids page
+    app.get('/my-bids', async (req, res) => {
+  const email = req.query.email;
+  if (!email) {
+    return res.status(400).send({ message: "Email parameter is required" });
+  }
+  const query = { buyer_email: email }; 
+  const result = await bidsCollecton.find(query).toArray();
+  res.send(result);
+});
+// perform delete in mybids page.....
+app.delete('/bids/:id', async (req, res) => {
+  const id = req.params.id;
+  const query = { _id: new ObjectId(id) };
+  const result = await bidsCollecton.deleteOne(query);
+  res.send(result);
+});
 
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
