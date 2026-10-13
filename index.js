@@ -27,12 +27,22 @@ const dbUser = process.env.DB_USER;
 const dbPass = encodeURIComponent(process.env.DB_PASS || '');
 const uri = `mongodb+srv://${dbUser}:${dbPass}@myfirstmongodb.a95ilzk.mongodb.net/?appName=myFirstMongodb`;
 
+// const client = new MongoClient(uri, {
+//   serverApi: {
+//     version: ServerApiVersion.v1,
+//     strict: true,
+//     deprecationErrors: true,
+//   }
+// });
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
+  connectTimeoutMS: 30000, // Wait 30 seconds before timing out
+  socketTimeoutMS: 45000,
 });
 
 async function run() {
