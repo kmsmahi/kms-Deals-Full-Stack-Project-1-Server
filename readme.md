@@ -4,6 +4,10 @@
 
 ---
 
+## 🌐 Live Application
+
+👉 **[Visit KMS-DEALS Live Site](https://kms-deals.netlify.app/)**
+
 ## 📌 Project Overview
 
 **KMS-DEALS Server** is the backend/API service of the KMS-DEALS full-stack marketplace application.
