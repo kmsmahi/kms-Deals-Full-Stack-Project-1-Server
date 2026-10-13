@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
@@ -6,14 +6,16 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Enable CORS explicitly for local dev (handling dynamically assigned ports)
+// Enable CORS for local development and deployed Netlify origins
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl) or local dev ports
-    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+    if (!origin || 
+        origin.startsWith('http://localhost') || 
+        origin.startsWith('http://127.0.0.1') || 
+        origin.includes('netlify.app')) {
       callback(null, true);
     } else {
-      callback(null, true); // Set to true for dev
+      callback(null, true);
     }
   },
   credentials: true,
@@ -27,21 +29,13 @@ const dbUser = process.env.DB_USER;
 const dbPass = encodeURIComponent(process.env.DB_PASS || '');
 const uri = `mongodb+srv://${dbUser}:${dbPass}@myfirstmongodb.a95ilzk.mongodb.net/?appName=myFirstMongodb`;
 
-// const client = new MongoClient(uri, {
-//   serverApi: {
-//     version: ServerApiVersion.v1,
-//     strict: true,
-//     deprecationErrors: true,
-//   }
-// });
-
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
   },
-  connectTimeoutMS: 30000, // Wait 30 seconds before timing out
+  connectTimeoutMS: 30000,
   socketTimeoutMS: 45000,
 });
 
@@ -196,9 +190,13 @@ async function run() {
     });
 
     app.delete('/bids/:id', async (req, res) => {
-      const id = req.params.id;
-      const result = await bidsCollecton.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
+      try {
+        const id = req.params.id;
+        const result = await bidsCollecton.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to delete bid", error: error.message });
+      }
     });
 
     app.post('/products', async (req, res) => {
